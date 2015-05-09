@@ -1,4 +1,4 @@
-package com.example.limxing;
+package com.example.limxingmusic;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -9,6 +9,7 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
 import android.os.Bundle;
@@ -26,6 +27,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.example.limxing.domain.Music;
+import com.example.limxing.receiver.MusicBroadcastreceiver;
 import com.example.limxing.service.MusicService;
 
 public class MainActivity extends Activity implements OnClickListener {
@@ -41,6 +43,7 @@ public class MainActivity extends Activity implements OnClickListener {
 	private ImageView xia;
 	private TextView tv;
 	private int position;
+	private MusicBroadcastreceiver receiver;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -66,6 +69,7 @@ public class MainActivity extends Activity implements OnClickListener {
 		} else {
 			putOutList();
 		}
+		// 判断音乐是否在播放状态设置相应
 		position = -1;
 		int po = sp1.getInt("position", -1);
 		String tag = sp1.getString("play", "pause");
@@ -93,12 +97,21 @@ public class MainActivity extends Activity implements OnClickListener {
 
 			}
 		});
-
+		receiver=new MusicBroadcastreceiver();
+		IntentFilter filter=new IntentFilter();
+		filter.addAction("com.example.limxing");
+		registerReceiver(receiver, filter);
+		
 	}
+	
 
 	// 三个图标的点击事件
 	@Override
 	public void onClick(View v) {
+		if (musicList.isEmpty()) {
+			Toast.makeText(MainActivity.this, "您手机里没有音乐文件", 0).show();
+			return;
+		}
 		Intent intent = new Intent(MainActivity.this, MusicService.class);
 		switch (v.getId()) {
 		case R.id.play:
@@ -127,7 +140,7 @@ public class MainActivity extends Activity implements OnClickListener {
 
 		case R.id.shang:
 
-			if (position != 0) {
+			if (position > 0) {
 				MainActivity.this.position = position - 1;
 				intent.putExtra("name", musicList.get(position).getPath());
 				play.setImageResource(R.drawable.pause);
@@ -166,8 +179,10 @@ public class MainActivity extends Activity implements OnClickListener {
 			for (String s : files) {
 				File newFile = new File(file, s);
 				if (newFile.isFile() && s.endsWith(".mp3")) {
-					musicList.add(new Music(newFile.toString(), s.substring(0,
-							s.length() - 4)));
+					if (newFile.length() > 3*1024*1024) {
+						musicList.add(new Music(newFile.toString(), s
+								.substring(0, s.length() - 4)));
+					}
 				} else {
 					show(newFile);
 				}
@@ -188,12 +203,26 @@ public class MainActivity extends Activity implements OnClickListener {
 	public boolean onOptionsItemSelected(MenuItem item) {
 		int id = item.getItemId();
 		if (id == R.id.action_settings) {
-			MainActivity.this.onDestroy();
+			Intent intent = new Intent(MainActivity.this, MusicService.class);
+			if (position != -1) {
+				intent.putExtra("name", "2");
+				play.setImageResource(R.drawable.play);
+				startService(intent);
+				finish();
+			} else {
+				stopService(intent);
+				finish();
+			}
 			return true;
 		}
 		// 点击菜单扫面文件，并书写到xml文件中
 		if (id == R.id.check) {
 			seekMusic();
+			return true;
+		}
+		if (id == R.id.limxing) {
+			Intent intent=new Intent(this,Limxing.class);
+			startActivity(intent);
 			return true;
 		}
 		return super.onOptionsItemSelected(item);
@@ -211,6 +240,7 @@ public class MainActivity extends Activity implements OnClickListener {
 				editor.clear();
 				musicList.clear();
 				show(file);
+				show(new File("/mnt/sdcard"));
 				for (Music m : musicList) {
 					editor.putString(m.getPath(), m.getName());
 				}
@@ -270,11 +300,14 @@ public class MainActivity extends Activity implements OnClickListener {
 
 	@Override
 	protected void onDestroy() {
-		Editor editor = sp1.edit();
-		editor.clear();
-		editor.putInt("position", position);
-		editor.putString("play", play.getTag().toString());
-		editor.commit();
+		if (position != -1) {
+			Editor editor = sp1.edit();
+			editor.clear();
+			editor.putInt("position", position);
+//			editor.putString("play", play.getTag().toString());
+			editor.putString("play", "pause");
+			editor.commit();
+		}
 		super.onDestroy();
 	}
 }
